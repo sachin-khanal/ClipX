@@ -110,21 +110,71 @@ class ClipboardPopup(NSPanel, PopupAnimationMixin):
     
     def set_on_delete_callback(self, callback):
         self._on_delete = callback
+    
+    def _create_noise_texture(self, width, height):
+        """Create a grey noise texture image for grain effect."""
+        import random
+        from Quartz import (
+            CGBitmapContextCreate, CGBitmapContextCreateImage,
+            CGColorSpaceCreateDeviceGray, kCGImageAlphaNone
+        )
+        
+        width = max(width, 64)
+        height = max(height, 64)
+        
+        # Create greyscale pixel data with random noise
+        pixels = bytearray(width * height)
+        for i in range(len(pixels)):
+            # Random grey values between 100-156 (subtle light/dark grey variation)
+            pixels[i] = random.randint(100, 156)
+        
+        # Create CGImage from pixel data
+        colorspace = CGColorSpaceCreateDeviceGray()
+        context = CGBitmapContextCreate(
+            pixels, width, height, 8, width, colorspace, kCGImageAlphaNone
+        )
+        
+        if context:
+            return CGBitmapContextCreateImage(context)
+        return None
 
     def _setup_content_view(self):
-        """Set up the glass-effect content view."""
+        """Set up the glass-effect content view with frosted grain texture."""
         content_frame = self.contentView().bounds()
         
         # Visual effect view for blur
         self._blur_view = NSVisualEffectView.alloc().initWithFrame_(content_frame)
-        self._blur_view.setMaterial_(4)  # .dark material
+        self._blur_view.setMaterial_(13)  # .hudWindow - more transparent
         self._blur_view.setBlendingMode_(0)  # .behindWindow
+        self._blur_view.setState_(1)  # .active - ensures effect is always visible
         self._blur_view.setWantsLayer_(True)
         self._blur_view.layer().setCornerRadius_(CORNER_RADIUS)
         self._blur_view.layer().setMasksToBounds_(True)
         self._blur_view.setAutoresizingMask_(18)
+        # Make the blur view itself more transparent
+        self._blur_view.setAlphaValue_(0.85)
         
         self.contentView().addSubview_(self._blur_view)
+        
+        # Add noise grain overlay for frosted glass effect
+        self._grain_view = NSView.alloc().initWithFrame_(content_frame)
+        self._grain_view.setWantsLayer_(True)
+        self._grain_view.setAutoresizingMask_(18)
+        grain_layer = self._grain_view.layer()
+        if grain_layer:
+            grain_layer.setCornerRadius_(CORNER_RADIUS)
+            grain_layer.setMasksToBounds_(True)
+            # Create actual noise texture
+            try:
+                noise_image = self._create_noise_texture(int(content_frame.size.width) or 320, 
+                                                          int(content_frame.size.height) or 400)
+                if noise_image:
+                    grain_layer.setContents_(noise_image)
+                    grain_layer.setContentsGravity_("resize")
+                    grain_layer.setOpacity_(0.15)  # Adjust grain intensity
+            except Exception as e:
+                print(f"[GlassEffect] Noise texture error: {e}", flush=True)
+        self._blur_view.addSubview_(self._grain_view)
         
         # Container for items
         self._items_container = NSView.alloc().initWithFrame_(content_frame)
@@ -446,9 +496,11 @@ class ClipboardPopup(NSPanel, PopupAnimationMixin):
         if not hasattr(self, '_scroll_view') or self._scroll_view is None:
             return
         
+        content_height = self._items_container.frame().size.height
+        visible_height = self._scroll_view.documentVisibleRect().size.height
+        
         # For edit button (index 0) or first item, scroll to top
         if index <= 1:
-            content_height = self._items_container.frame().size.height
             top_point = NSMakePoint(0, content_height)
             self._items_container.scrollPoint_(top_point)
             return
@@ -460,17 +512,44 @@ class ClipboardPopup(NSPanel, PopupAnimationMixin):
         item_view = self._item_views[item_index]
         item_frame = item_view.frame()
         
+        # Get current scroll position (Y coordinate of the visible rect's origin)
+        current_visible_rect = self._scroll_view.documentVisibleRect()
+        current_scroll_y = current_visible_rect.origin.y
+        
+        # Calculate the top and bottom of the visible area
+        visible_top = current_scroll_y + visible_height
+        visible_bottom = current_scroll_y
+        
+        # Calculate item's top and bottom positions
+        item_top = item_frame.origin.y + item_frame.size.height
+        item_bottom = item_frame.origin.y
+        
+        # For the last item, include bottom padding
         if item_index == len(self._item_views) - 1:
-            # Add bottom padding to rect for the last item
-            rect_to_show = NSMakeRect(
-                item_frame.origin.x,
-                item_frame.origin.y - (PADDING * 3), # Include the bottom space
-                item_frame.size.width,
-                item_frame.size.height + (PADDING * 3)
-            )
-            self._items_container.scrollRectToVisible_(rect_to_show)
-        else:
-            self._items_container.scrollRectToVisible_(item_frame)
+            item_bottom -= (PADDING * 3)
+        
+        # Check if item is already fully visible
+        if item_top <= visible_top and item_bottom >= visible_bottom:
+            return  # Already visible, no scroll needed
+        
+        # Scroll down: if item bottom is below visible area
+        if item_bottom < visible_bottom:
+            # Scroll down by exactly one item height
+            new_scroll_y = current_scroll_y - ITEM_HEIGHT
+            # Clamp to not go below 0
+            new_scroll_y = max(0, new_scroll_y)
+            scroll_point = NSMakePoint(0, new_scroll_y)
+            self._items_container.scrollPoint_(scroll_point)
+        
+        # Scroll up: if item top is above visible area
+        elif item_top > visible_top:
+            # Scroll up by exactly one item height
+            new_scroll_y = current_scroll_y + ITEM_HEIGHT
+            # Clamp to not exceed content bounds
+            max_scroll_y = content_height - visible_height
+            new_scroll_y = min(max_scroll_y, new_scroll_y)
+            scroll_point = NSMakePoint(0, new_scroll_y)
+            self._items_container.scrollPoint_(scroll_point)
     
     def _on_item_delete(self, index: int):
         """Handle delete button click on an item. Index is 1-based."""
@@ -491,23 +570,22 @@ class ClipboardPopup(NSPanel, PopupAnimationMixin):
             view.set_edit_mode(self._is_edit_mode)
     
     def _delete_item_at_index(self, item_index: int):
-        """Delete an item with animation. item_index is 0-based into _items."""
+        """Delete an item with animation. item_index is 0-based into _items.
+        Uses queue-based system to allow spamming delete while animations are in progress."""
         try:
             if item_index < 0 or item_index >= len(self._items):
                 print(f"[Popup] Invalid delete index: {item_index}", flush=True)
                 return
             
-            print(f"[Popup] Deleting item at index {item_index}", flush=True)
+            print(f"[Popup] Queuing deletion for item at index {item_index}", flush=True)
             
-            # Call the delete callback
-            if self._on_delete:
-                self._on_delete(item_index)
-            
-            # Remove from local items list
-            del self._items[item_index]
-            
-            # Animate (from Mixin)
-            self._animate_item_removal(item_index)
+            # Queue the entire deletion operation - data removal + animation
+            # The queue processor will call the callback and delete from _items in sequence
+            self._queue_item_deletion(
+                view_index=item_index,
+                on_delete_callback=self._on_delete,
+                item_index=item_index
+            )
         except Exception as e:
             print(f"[Popup] EXCEPTION in _delete_item_at_index: {e}", flush=True)
             import traceback

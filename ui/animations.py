@@ -28,6 +28,97 @@ class PopupAnimationMixin:
     Expected to be mixed into a class that inherits from NSPanel/NSWindow and has specific attributes.
     """
     
+    def _init_deletion_queue(self):
+        """Initialize the deletion queue system."""
+        if not hasattr(self, '_deletion_queue'):
+            self._deletion_queue = []  # List of pending deletion requests
+            self._deletion_in_progress = False  # True if an animation is currently running
+            self._pending_deletion_views = set()  # Track views already queued for deletion
+    
+    def _queue_item_deletion(self, view_index: int, on_delete_callback=None, item_index: int = None):
+        """Queue a complete deletion operation. Processes immediately if no animation is running.
+        
+        view_index: The index into _item_views at the time of queueing.
+        on_delete_callback: Optional callback to call when processing (e.g., to notify main.py)
+        item_index: The original item index for the callback
+        """
+        self._init_deletion_queue()
+        
+        # Check if this view is already pending deletion - prevent double-delete
+        if view_index in self._pending_deletion_views:
+            print(f"[Popup] View {view_index} already pending deletion, ignoring", flush=True)
+            return
+        
+        # Mark as pending
+        self._pending_deletion_views.add(view_index)
+        
+        # Add to queue with all necessary info
+        self._deletion_queue.append({
+            'view_index': view_index,
+            'on_delete_callback': on_delete_callback,
+            'item_index': item_index
+        })
+        print(f"[Popup] Queued deletion for view index {view_index}, queue size: {len(self._deletion_queue)}", flush=True)
+        
+        # If no animation is running, start processing
+        if not self._deletion_in_progress:
+            self._process_deletion_queue()
+    
+    def _process_deletion_queue(self):
+        """Process the next item in the deletion queue."""
+        self._init_deletion_queue()
+        
+        if not self._deletion_queue:
+            print(f"[Popup] Deletion queue empty, done processing", flush=True)
+            return
+        
+        if self._deletion_in_progress:
+            print(f"[Popup] Deletion already in progress, waiting...", flush=True)
+            return
+        
+        # Pop the next deletion request
+        request = self._deletion_queue.pop(0)
+        view_index = request['view_index']
+        
+        # Validate the index is still valid
+        if view_index >= len(self._item_views):
+            print(f"[Popup] View index {view_index} out of bounds (len={len(self._item_views)}), skipping", flush=True)
+            # Remove from pending set
+            self._pending_deletion_views.discard(view_index)
+            self._process_deletion_queue()
+            return
+        
+        self._deletion_in_progress = True
+        print(f"[Popup] Processing deletion at view index {view_index}, remaining in queue: {len(self._deletion_queue)}", flush=True)
+        
+        # Call the delete callback to notify main.py BEFORE modifying data
+        # Use the current view_index since data hasn't been modified yet
+        if request['on_delete_callback']:
+            request['on_delete_callback'](view_index)
+        
+        # Remove from items list NOW (data deletion happens here, in sequence)
+        if view_index < len(self._items):
+            del self._items[view_index]
+        
+        # Adjust all remaining queued indices - items after this one shift down by 1
+        for i in range(len(self._deletion_queue)):
+            if self._deletion_queue[i]['view_index'] > view_index:
+                self._deletion_queue[i]['view_index'] -= 1
+        
+        # Also adjust the pending set
+        new_pending = set()
+        for pending_idx in self._pending_deletion_views:
+            if pending_idx == view_index:
+                continue  # This one is being processed now
+            elif pending_idx > view_index:
+                new_pending.add(pending_idx - 1)
+            else:
+                new_pending.add(pending_idx)
+        self._pending_deletion_views = new_pending
+        
+        # Trigger the actual animation
+        self._animate_item_removal_queued(view_index)
+    
     def _animate_hide(self):
         """Animate the popup hiding using timer."""
         if not self._is_visible:
@@ -94,9 +185,18 @@ class PopupAnimationMixin:
         NSAnimationContext.endGrouping()
 
     def _animate_item_removal(self, removed_index: int):
-        """Animate removal of an item and repositioning of remaining items."""
+        """Animate removal of an item and repositioning of remaining items.
+        This is called directly for the old API. For queue-based deletion, use _queue_item_deletion."""
+        self._init_deletion_queue()
         
-        print(f"[Popup] _animate_item_removal called, removed_index={removed_index}, item_views={len(self._item_views)}", flush=True)
+        # If using the direct API, just run the animation directly
+        self._deletion_in_progress = True
+        self._animate_item_removal_queued(removed_index)
+    
+    def _animate_item_removal_queued(self, removed_index: int):
+        """Internal: Animate removal of an item (called from queue processor)."""
+        
+        print(f"[Popup] _animate_item_removal_queued called, removed_index={removed_index}, item_views={len(self._item_views)}", flush=True)
         
         if removed_index >= len(self._item_views):
             print(f"[Popup] removed_index out of bounds, skipping animation", flush=True)
@@ -138,15 +238,23 @@ class PopupAnimationMixin:
                 print(f"[Popup] Deleting last item, dismissing window", flush=True)
                 self.hide(animate=True)
                 
+                # Capture popup reference for closure
+                popup = self
+                
                 # Cleanup state in background after window fades
                 def cleanup_last_item(timer):
                     removed_view.removeFromSuperview()
-                    if removed_index < len(self._item_views):
-                        self._item_views.pop(removed_index)
-                    self._items_container.setFrame_(NSMakeRect(0, 0, blur_width, 0))
-                    self._selected_index = 0
-                    if self._edit_button_view:
-                        self._edit_button_view.set_selected(True) # Reset to edit button
+                    if removed_index < len(popup._item_views):
+                        popup._item_views.pop(removed_index)
+                    popup._items_container.setFrame_(NSMakeRect(0, 0, blur_width, 0))
+                    popup._selected_index = 0
+                    if popup._edit_button_view:
+                        popup._edit_button_view.set_selected(True) # Reset to edit button
+                    
+                    # Clear the deletion queue and mark complete since window is hidden
+                    popup._deletion_in_progress = False
+                    popup._deletion_queue = []
+                    popup._pending_deletion_views = set()
                         
                 NSTimer.scheduledTimerWithTimeInterval_repeats_block_(
                     0.25, False, cleanup_last_item
@@ -274,8 +382,14 @@ class PopupAnimationMixin:
                     print(f"[Popup] Error in cleanup_after_animation: {e}", flush=True)
                     traceback.print_exc()
             
+            def on_animation_complete(timer):
+                cleanup_after_animation(timer)
+                # Mark deletion as complete and process next in queue
+                popup._deletion_in_progress = False
+                popup._process_deletion_queue()
+            
             NSTimer.scheduledTimerWithTimeInterval_repeats_block_(
-                duration + 0.05, False, cleanup_after_animation
+                duration + 0.05, False, on_animation_complete
             )
         except Exception as e:
             print(f"[Popup] Error in _animate_item_removal: {e}", flush=True)
