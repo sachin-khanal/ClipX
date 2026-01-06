@@ -80,8 +80,17 @@ class ClipXDelegate(NSObject):
         self._popup = None
         self._status_item = None
         self._popup_visible = False
+        self._debug_mode = False  # Default to False
         
         return self
+    
+    @property
+    def debug_mode(self):
+        return self._debug_mode
+    
+    @debug_mode.setter
+    def debug_mode(self, value):
+        self._debug_mode = value
     
     def applicationDidFinishLaunching_(self, notification):
         """Called when app is ready."""
@@ -105,13 +114,23 @@ class ClipXDelegate(NSObject):
         
         # Start clipboard monitor
         print("[Main] Starting clipboard monitor...", flush=True)
-        self._clipboard_monitor = ClipboardMonitor(on_change=self._on_clipboard_change)
+        # Start clipboard monitor
+        print("[Main] Starting clipboard monitor...", flush=True)
+        self._clipboard_monitor = ClipboardMonitor(
+            on_change=self._on_clipboard_change,
+            debug=self._debug_mode
+        )
         self._clipboard_monitor.start()
         print("✓ Clipboard monitoring started", flush=True)
         
         # Start hotkey handler
         print("[Main] Starting hotkey handler...", flush=True)
-        self._hotkey_handler = HotkeyHandler(on_trigger=self._on_hotkey_trigger)
+        # Start hotkey handler
+        print("[Main] Starting hotkey handler...", flush=True)
+        self._hotkey_handler = HotkeyHandler(
+            on_trigger=self._on_hotkey_trigger,
+            debug=self._debug_mode
+        )
         self._hotkey_handler.start()
         print("[Main] Hotkey handler started.", flush=True)
         
@@ -302,11 +321,20 @@ class ClipXDelegate(NSObject):
 
 def main():
     """Main entry point."""
-    # Setup logging
-    log_path = os.path.expanduser("~/clipx.log")
-    sys.stdout = DebugLogger(log_path)
-    sys.stderr = sys.stdout
-    print(f"--- ClipX Starting at {log_path} ---", flush=True)
+    # Detect if we are running as a packaged app
+    is_packaged = getattr(sys, 'frozen', False)
+    debug_mode = not is_packaged
+
+    if debug_mode:
+        # Setup specific logging only in dev
+        log_path = os.path.expanduser("~/clipx.log")
+        sys.stdout = DebugLogger(log_path)
+        sys.stderr = sys.stdout
+        print(f"--- ClipX Starting (Dev Mode) at {log_path} ---", flush=True)
+    else:
+        # In production, we don't redirect stdout/stderr to a file
+        # We can also silence print statements if desired, but just not writing to disk is the main goal
+        pass
 
     # Handle Ctrl+C gracefully
     signal.signal(signal.SIGINT, lambda s, f: NSApp.terminate_(None))
@@ -319,6 +347,7 @@ def main():
     
     # Set delegate
     delegate = ClipXDelegate.alloc().init()
+    delegate.debug_mode = debug_mode
     app.setDelegate_(delegate)
     
     # Run

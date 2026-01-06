@@ -117,9 +117,10 @@ class ClipboardMonitor:
     STORAGE_DIR = Path.home() / "Library" / "Application Support" / "ClipX"
     HISTORY_FILE = STORAGE_DIR / "history.json"
     
-    def __init__(self, on_change: Optional[Callable[[str], None]] = None, max_history: int = 50):
+    def __init__(self, on_change: Optional[Callable[[str], None]] = None, max_history: int = 50, debug: bool = False):
         self.on_change = on_change
         self.max_history = max_history
+        self.debug = debug
         self.history: List[ClipboardItem] = []
         
         self._pasteboard = NSPasteboard.generalPasteboard()
@@ -269,15 +270,20 @@ class ClipboardMonitor:
             # Determine content type and create item
             if has_text and has_image:
                 content_type = "mixed"
-                print(f"[ClipboardMonitor] New mixed content: {text_content[:30]}... + image")
+                if self.debug:
+                    print(f"[ClipboardMonitor] New mixed content: {text_content[:30]}... + image")
             elif has_image:
                 content_type = "image"
-                print(f"[ClipboardMonitor] New image content")
+                if self.debug:
+                    print(f"[ClipboardMonitor] New image content")
             elif has_text:
                 content_type = "text"
-                print(f"[ClipboardMonitor] New text content: {text_content[:50]}...")
+                if self.debug:
+                    safe_preview = text_content[:50].encode('ascii', 'replace').decode('ascii')
+                    print(f"[ClipboardMonitor] New text content: {safe_preview}...")
             else:
-                print("[ClipboardMonitor] No recognized content type")
+                if self.debug:
+                    print("[ClipboardMonitor] No recognized content type")
                 return
             
             self._add_to_history(content_type, text_content if has_text else None, image_data, thumbnail)

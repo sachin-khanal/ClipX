@@ -39,8 +39,9 @@ class HotkeyHandler:
     Detects Cmd+Option+V to trigger the clipboard popup.
     """
     
-    def __init__(self, on_trigger: Optional[Callable[[], None]] = None):
+    def __init__(self, on_trigger: Optional[Callable[[], None]] = None, debug: bool = False):
         self.on_trigger = on_trigger
+        self.debug = debug
         self._tap = None
         self._run_loop_source = None
         self._thread: Optional[threading.Thread] = None
@@ -127,8 +128,9 @@ class HotkeyHandler:
                 cmd_pressed = bool(flags & Quartz.kCGEventFlagMaskCommand)
                 alt_pressed = bool(flags & Quartz.kCGEventFlagMaskAlternate)
                 
-                # Log all key presses for debugging
-                print(f"[HotkeyHandler] Key pressed: code={key_code}, cmd={cmd_pressed}, alt={alt_pressed}")
+                # Log key presses ONLY in debug mode to prevent keylogging behavior
+                if self.debug:
+                    print(f"[HotkeyHandler] Key pressed: code={key_code}, cmd={cmd_pressed}, alt={alt_pressed}")
                 
                 if key_code == KEY_V and cmd_pressed and alt_pressed:
                     print("[HotkeyHandler] *** HOTKEY DETECTED: Cmd+Option+V ***")
