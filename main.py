@@ -63,7 +63,7 @@ import objc
 from clipboard_monitor import ClipboardMonitor
 from hotkey_handler import HotkeyHandler
 from accessibility import AccessibilityHelper, ElementRect
-from popup_window import ClipboardPopup, calculate_popup_position, ITEM_HEIGHT, PADDING, POPUP_MAX_HEIGHT
+from ui import ClipboardPopup, calculate_popup_position, ITEM_HEIGHT, PADDING, POPUP_MAX_HEIGHT, EDIT_BUTTON_HEIGHT
 from updater import Updater
 import startup
 
@@ -317,8 +317,12 @@ class ClipXDelegate(NSObject):
             if element_rect:
                 # Calculate position
                 # Calculate position based on actual content height
-                # num_items * ITEM_HEIGHT + (PADDING * 2)
-                content_height = len(history) * ITEM_HEIGHT + (PADDING * 2)
+                # Matching ui/popup.py logic:
+                # items_height + edit_button_space + (PADDING * 3)
+                edit_button_space = EDIT_BUTTON_HEIGHT + PADDING
+                items_height = len(history) * ITEM_HEIGHT
+                content_height = items_height + edit_button_space + (PADDING * 3)
+                
                 popup_height = min(content_height, POPUP_MAX_HEIGHT)
                 
                 x, y, show_above = calculate_popup_position(
@@ -446,7 +450,6 @@ def main():
     
     # Check for another running instance
     from AppKit import NSRunningApplication, NSAlert, NSAlertStyleCritical
-    import os
     
     current_pid = os.getpid()
     bundle_id = "com.clipx.app" # Must match setup.py
