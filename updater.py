@@ -109,7 +109,10 @@ rm -- "$0"
             current_bundle_path = NSBundle.mainBundle().bundlePath()
             
             # Check if we are running as a packaged app
-            is_packaged = getattr(os.sys, 'frozen', False) or current_bundle_path.endswith('.app')
+            # CRITICAL: Only use sys.frozen to detect packaged app. 
+            # Checking .endswith('.app') is DANGEROUS because when running from source,
+            # the main bundle is often the Python interpreter itself (Python.app).
+            is_packaged = getattr(os.sys, 'frozen', False)
             
             if is_packaged and current_bundle_path != str(new_app_path):
                 print(f"[Updater] Preparing to replace {current_bundle_path}...")
