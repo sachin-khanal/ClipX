@@ -265,6 +265,15 @@ rm -- "$0"
                 print("[Updater] Error: ClipX.app not found in zip")
                 return False
 
+            # FIX: Restore executable permissions
+            # ZipFile extractall doesn't always preserve permissions
+            executable_path = new_app_path / "Contents" / "MacOS" / "ClipX"
+            if executable_path.exists():
+                print(f"[Updater] Restoring executable permissions for {executable_path}")
+                os.chmod(executable_path, 0o755)
+            else:
+                 print(f"[Updater] Warning: Executable not found at {executable_path}")
+
             # Detect current app path
             from AppKit import NSBundle
             current_bundle_path = NSBundle.mainBundle().bundlePath()
