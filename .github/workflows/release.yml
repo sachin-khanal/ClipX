@@ -31,6 +31,10 @@ jobs:
         pip install -r requirements.txt
         pip install py2app
 
+    - name: Generate Version Info
+      run: |
+        echo "{\"commit_sha\": \"${{ github.sha }}\", \"build_time\": \"$(date -u +'%Y-%m-%dT%H:%M:%SZ')\"}" > version_info.json
+
     - name: Build macOS Application
       run: |
         python3 setup.py py2app

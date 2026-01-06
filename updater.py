@@ -9,9 +9,34 @@ import subprocess
 from pathlib import Path
 from AppKit import NSAlert, NSAlertStyleInformational, NSAlertStyleCritical
 
+import re
+
 RELEASE_URL = "https://api.github.com/repos/sooswastaken/ClipX/releases/tags/latest"
 
 class Updater:
+    @staticmethod
+    def get_local_version():
+        """
+        Read the local version_info.json file.
+        Returns a dict with commit_sha and build_time, or None if not found.
+        """
+        try:
+            # Try to find the file in the Resources directory (packaged app)
+            from AppKit import NSBundle
+            path = NSBundle.mainBundle().pathForResource_ofType_("version_info", "json")
+            
+            if not path:
+                # Fallback to current directory (dev mode)
+                path = "version_info.json"
+            
+            if os.path.exists(path):
+                with open(path, 'r') as f:
+                    return json.load(f)
+        except Exception as e:
+            print(f"[Updater] Error reading local version: {e}")
+            return None
+        return None
+
     @staticmethod
     def check_for_updates():
         """
@@ -20,6 +45,10 @@ class Updater:
         """
         try:
             print(f"[Updater] Checking for updates from {RELEASE_URL}...")
+            
+            local_version = Updater.get_local_version()
+            local_sha = local_version.get('commit_sha') if local_version else None
+            
             with urllib.request.urlopen(RELEASE_URL, timeout=10) as response:
                 if response.status == 200:
                     data = json.loads(response.read().decode('utf-8'))
@@ -30,7 +59,8 @@ class Updater:
                         "published_at": data.get("published_at"),
                         "body": data.get("body"),
                         "html_url": data.get("html_url"),
-                        "assets": data.get("assets", [])
+                        "assets": data.get("assets", []),
+                        "status": "UNKNOWN"
                     }
                     
                     # Find the asset download URL
@@ -38,6 +68,29 @@ class Updater:
                         if asset["name"] == "ClipX.zip":
                             release_info["download_url"] = asset["browser_download_url"]
                             break
+                    
+                    # Try to parse SHA from release body
+                    # Look for "Commit: <sha>"
+                    remote_sha = None
+                    if release_info.get('body'):
+                        match = re.search(r'Commit: ([a-f0-9]+)', release_info['body'])
+                        if match:
+                            remote_sha = match.group(1)
+                            release_info["remote_sha"] = remote_sha
+                    
+                    # Compare versions
+                    if local_sha and remote_sha:
+                        # Simple prefix matching (GH usually gives short SHA or long SHA)
+                        # Normalize to verify equality
+                        if remote_sha.startswith(local_sha) or local_sha.startswith(remote_sha):
+                            release_info["status"] = "UP_TO_DATE"
+                        else:
+                            release_info["status"] = "UPDATE_AVAILABLE"
+                    elif not local_sha:
+                        # No local version info (dev mode or old build), assume update available ??
+                        # Or maybe UNKNOWN. Let's say UNKNOWN but available to download.
+                        print("[Updater] No local version info found.")
+                        release_info["status"] = "UNKNOWN"
                     
                     return release_info
         except Exception as e:
@@ -145,24 +198,57 @@ rm -- "$0"
         Returns True if user wants to update, False otherwise.
         """
         alert = NSAlert.alloc().init()
-        alert.setMessageText_("Check for Updates")
         
         if release_info:
+            status = release_info.get("status", "UNKNOWN")
+            tag_name = release_info.get('tag_name')
             published_date = release_info.get('published_at', 'Unknown date').split('T')[0]
-            info_text = (
-                f"Latest Release: {release_info.get('tag_name')}\n"
-                f"Published: {published_date}\n\n"
-                f"Release Notes:\n{release_info.get('body')}\n\n"
-                "Would you like to download this update?"
-            )
-            alert.setInformativeText_(info_text)
-            alert.addButtonWithTitle_("Download & Update")
-            alert.addButtonWithTitle_("Cancel")
+            
+            if status == "UP_TO_DATE":
+                alert.setMessageText_("You are up to date")
+                alert.setInformativeText_(
+                    f"ClipX {tag_name} is currently the newest version available.\n\n"
+                    f"Installed Commit: {Updater.get_local_version().get('commit_sha')[:7]}\n"
+                    f"Latest Commit: {release_info.get('remote_sha')[:7]}"
+                )
+                alert.addButtonWithTitle_("OK")
+                alert.runModal()
+                return False
+                
+            elif status == "UPDATE_AVAILABLE":
+                alert.setMessageText_("Update Available")
+                info_text = (
+                    f"A new version of ClipX is available!\n\n"
+                    f"Release: {tag_name} ({published_date})\n"
+                    f"Release Notes:\n{release_info.get('body')}\n\n"
+                    "Would you like to download and install this update?"
+                )
+                alert.setInformativeText_(info_text)
+                alert.addButtonWithTitle_("Download & Update")
+                alert.addButtonWithTitle_("Cancel")
+                response = alert.runModal()
+                return response == 1000
+                
+            else:
+                # UNKNOWN or fallback
+                alert.setMessageText_("Check for Updates")
+                info_text = (
+                    f"Latest Release: {tag_name}\n"
+                    f"Published: {published_date}\n\n"
+                    f"Release Notes:\n{release_info.get('body')}\n\n"
+                    "Would you like to download this update?"
+                )
+                alert.setInformativeText_(info_text)
+                alert.addButtonWithTitle_("Download & Update")
+                alert.addButtonWithTitle_("Cancel")
+                response = alert.runModal()
+                return response == 1000
+
         else:
             alert.setMessageText_("Update Check Failed")
             alert.setInformativeText_("Could not verify release information. Please check your internet connection.")
             alert.setAlertStyle_(NSAlertStyleCritical)
             alert.addButtonWithTitle_("OK")
-
-        response = alert.runModal()
-        return response == 1000 # 1000 is the first button (Download/OK)
+            
+            alert.runModal()
+            return False
