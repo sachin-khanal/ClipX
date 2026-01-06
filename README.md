@@ -6,17 +6,46 @@ A native clipboard history manager for macOS — bringing Windows' `Win + V` cli
 ![Python](https://img.shields.io/badge/Python-3.10+-green)
 ![License](https://img.shields.io/badge/License-MIT-yellow)
 
-## ✨ Features
+## Features
 
-- **📋 Clipboard History** — Automatically tracks your last 50 copied items (text and images)
-- **⌨️ Global Hotkey** — Press `⌘ ⌥ V` (Cmd+Option+V) anywhere to open the popup
-- **🎯 Smart Positioning** — Popup appears near your current text cursor using Accessibility APIs
-- **🖼️ Image Support** — Copies images with thumbnail previews (PNG/TIFF)
-- **🔍 Deduplication** — Automatically removes duplicate text entries
-- **🎨 Native UI** — Glassmorphism design with smooth spring animations
-- **⚡ Lightweight** — Runs as a menu bar app with no dock icon
+- **Clipboard History** — Automatically tracks your last 50 copied items (text and images)
+- **Global Hotkey** — Press `Cmd + Option + V` anywhere to open the popup
+- **Smart Positioning** — Popup appears near your current text cursor using Accessibility APIs
+- **Image Support** — Copies images with thumbnail previews (PNG/TIFF)
+- **Deduplication** — Automatically removes duplicate text entries
+- **Native UI** — Glassmorphism design with smooth spring animations
+- **Lightweight** — Runs as a menu bar app with no dock icon
 
-## 📦 Installation
+## Usage
+
+### Shortcut
+
+Press **Cmd + Option + V** to open the clipboard history popup.
+
+### Popup Location
+
+The popup attempts to appear intelligently based on your context:
+- Often directly below your text cursor
+- Near the active input field (e.g., Chrome URL bar)
+
+### Navigation
+
+| Action | Shortcut |
+|--------|----------|
+| Show clipboard history | `Cmd + Option + V` |
+| Navigate items | `Up` / `Down` arrows |
+| Paste selected item | `Enter` or click |
+| Dismiss popup | `Escape` or click outside |
+| Quit app | Click menu bar icon → Quit |
+
+### Closing the Popup
+
+The popup can be dismissed by:
+- Pressing the **Esc** key
+- Clicking anywhere outside the popup window
+- Selecting an item to paste (this will paste the item and close the popup)
+
+## Installation
 
 ### Prerequisites
 
@@ -47,21 +76,11 @@ ClipX requires Accessibility permission to:
 - Detect the global hotkey
 - Position the popup near your cursor
 
-1. Open **System Settings → Privacy & Security → Accessibility**
+1. Open **System Settings > Privacy & Security > Accessibility**
 2. Add your Terminal or IDE to the list
 3. Enable the toggle
 
-## 🚀 Usage
-
-| Action | Shortcut |
-|--------|----------|
-| Show clipboard history | `⌘ ⌥ V` |
-| Navigate items | `↑` `↓` |
-| Paste selected item | `Enter` or click |
-| Dismiss popup | `Escape` or click outside |
-| Quit app | Click menu bar icon → Quit |
-
-## 🏗️ Architecture
+## Architecture
 
 ```
 ClipX/
@@ -73,18 +92,10 @@ ClipX/
 └── icon.icns            # Menu bar icon
 ```
 
-## 🛠️ Building as a Standalone App
-
-```bash
-python setup.py py2app
-```
-
-The `.app` bundle will be created in the `dist/` folder.
-
-## 📝 License
+## License
 
 MIT License — feel free to use and modify.
 
 ---
 
-Made with ❤️ for macOS power users
+Made with care for macOS power users
