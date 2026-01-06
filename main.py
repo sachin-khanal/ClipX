@@ -444,6 +444,46 @@ def main():
     # Create application
     app = NSApplication.sharedApplication()
     
+    # Check for another running instance
+    from AppKit import NSRunningApplication, NSAlert, NSAlertStyleCritical
+    import os
+    
+    current_pid = os.getpid()
+    bundle_id = "com.clipx.app" # Must match setup.py
+    
+    running_apps = NSRunningApplication.runningApplicationsWithBundleIdentifier_(bundle_id)
+    other_instances = [a for a in running_apps if a.processIdentifier() != current_pid]
+    
+    if other_instances:
+        print(f"[Main] Found {len(other_instances)} other instance(s) running.")
+        
+        # We need to activate the app to show the alert, even if it's an agent
+        app.setActivationPolicy_(1) # NSApplicationActivationPolicyRegular for alert
+        
+        alert = NSAlert.alloc().init()
+        alert.setMessageText_("ClipX is already running")
+        alert.setInformativeText_("Another instance of ClipX is already running. What would you like to do?")
+        alert.setAlertStyle_(NSAlertStyleCritical)
+        alert.addButtonWithTitle_("Quit New Instance")
+        alert.addButtonWithTitle_("Terminate Other & Continue")
+        
+        # Bring to front
+        app.activateIgnoringOtherApps_(True)
+        
+        response = alert.runModal()
+        
+        if response == 1000: # Quit New Instance
+            print("[Main] User chose to quit new instance.")
+            sys.exit(0)
+        elif response == 1001: # Terminate Other
+            print("[Main] User chose to terminate other instance(s).")
+            for other_app in other_instances:
+                other_app.forceTerminate()
+                # Wait briefly for it to die?
+            # Continue starting up...
+            pass
+
+    
     # Run as accessory (no dock icon)
     app.setActivationPolicy_(NSApplicationActivationPolicyAccessory)
     
