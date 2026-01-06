@@ -41,11 +41,17 @@ jobs:
         zip -r ClipX.zip ClipX.app
         cd ..
 
+    - name: Delete Old Release
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        gh release delete latest --cleanup-tag -y || echo "No existing release to delete"
+
     - name: Update 'latest' Tag
       run: |
         git config user.name "GitHub Actions"
         git config user.email "actions@github.com"
-        # Force update the 'latest' tag to the current commit
+        # Create/Update the tag
         git tag -fa latest -m "Latest build"
         git push -f origin latest
 
@@ -54,7 +60,7 @@ jobs:
       with:
         tag_name: latest
         name: Automatic Build
-        body: "Automated build from the latest commit."
+        body: "Automated build from the latest commit (Commit: ${{ github.sha }})."
         files: dist/ClipX.zip
         draft: false
         prerelease: false
