@@ -112,6 +112,7 @@ class ClipXDelegate(NSObject):
         # Create popup
         print("[Main] Creating popup window...", flush=True)
         self._popup = ClipboardPopup.create(on_select=self._on_item_selected)
+        self._popup._on_delete = self._on_item_delete
         print("[Main] Popup created.", flush=True)
         
         # Start clipboard monitor
@@ -228,8 +229,13 @@ class ClipXDelegate(NSObject):
                     return None
                 # Enter
                 elif key_code == 36:
+                    # Check if we should stay open (edit mode toggle or delete)
+                    was_edit_mode = self._popup._is_edit_mode
+                    was_on_edit_button = self._popup._selected_index == 0
                     self._popup.confirm_selection()
-                    self._popup_visible = False
+                    # Only close popup if we actually pasted (normal mode, item selected)
+                    if not was_edit_mode and not was_on_edit_button:
+                        self._popup_visible = False
                     return None
                 # Escape
                 elif key_code == 53:
@@ -349,6 +355,20 @@ class ClipXDelegate(NSObject):
         self._popup_visible = False
         preview = item.content[:30].replace('\n', ' ')
         print(f"✅ Pasted: {preview}...")
+    
+    def _on_item_delete(self, index: int):
+        """Called when a clipboard item is deleted via edit mode."""
+        print(f"[Main] _on_item_delete ENTER index={index}", flush=True)
+        try:
+            if self._clipboard_monitor:
+                print(f"[Main] Calling delete_item...", flush=True)
+                result = self._clipboard_monitor.delete_item(index)
+                print(f"[Main] delete_item returned: {result}", flush=True)
+            print(f"[Main] _on_item_delete EXIT", flush=True)
+        except Exception as e:
+            print(f"[Main] Error in _on_item_delete: {e}", flush=True)
+            import traceback
+            traceback.print_exc()
     
     def clearHistory_(self, sender):
         """Clear clipboard history."""

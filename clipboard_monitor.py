@@ -223,6 +223,23 @@ class ClipboardMonitor:
         self._save_history()
         print("[ClipboardMonitor] History cleared")
     
+    def delete_item(self, index: int) -> bool:
+        """Delete a specific item from history by index."""
+        deleted = False
+        with self._lock:
+            if 0 <= index < len(self.history):
+                deleted_item = self.history.pop(index)
+                print(f"[ClipboardMonitor] Deleted item at index {index}: {deleted_item.preview[:30]}...")
+                deleted = True
+            else:
+                print(f"[ClipboardMonitor] Invalid index {index}, history size is {len(self.history)}")
+        
+        # Save outside of lock to prevent deadlock
+        if deleted:
+            self._save_history()
+        
+        return deleted
+    
     def _poll_loop(self):
         """Background polling loop."""
         print("[ClipboardMonitor] Starting polling loop...")
