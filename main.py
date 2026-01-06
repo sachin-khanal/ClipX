@@ -64,6 +64,7 @@ from clipboard_monitor import ClipboardMonitor
 from hotkey_handler import HotkeyHandler
 from accessibility import AccessibilityHelper, ElementRect
 from popup_window import ClipboardPopup, calculate_popup_position, ITEM_HEIGHT, PADDING, POPUP_MAX_HEIGHT
+from updater import Updater
 
 
 class ClipXDelegate(NSObject):
@@ -170,6 +171,12 @@ class ClipXDelegate(NSObject):
         menu.addItem_(clear_item)
         
         menu.addItem_(NSMenuItem.separatorItem())
+        
+        # Check for Updates item
+        update_item = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(
+            "Check for Updates...", "checkForUpdates:", ""
+        )
+        menu.addItem_(update_item)
         
         # Quit item
         quit_item = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(
@@ -329,6 +336,25 @@ class ClipXDelegate(NSObject):
                 self._popup.hide()
                 self._popup_visible = False
                 print("[Main] Popup hidden after clearing history")
+
+    def checkForUpdates_(self, sender):
+        """Check for updates."""
+        print("[Main] User requested update check...")
+        
+        # Run in background to avoid blocking UI? 
+        # For simplicity in this iteration, we'll run sync (might block briefly)
+        # or use a simple timer/thread if needed. Since urllib is blocking, 
+        # let's just do it. Ideally dispatch_async.
+        
+        release_info = Updater.check_for_updates()
+        if Updater.show_update_dialog(release_info):
+            if release_info:
+                # If install_and_restart returns True, it means the update script is running
+                # and we should terminate to allow it to replace the app file.
+                if Updater.install_and_restart(release_info.get('download_url')):
+                    print("[Main] Update script started. Terminating...")
+                    from AppKit import NSApp
+                    NSApp.terminate_(self)
 
     def applicationWillTerminate_(self, notification):
         """Cleanup on exit."""
