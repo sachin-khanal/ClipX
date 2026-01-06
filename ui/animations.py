@@ -4,10 +4,12 @@ from AppKit import (
     NSMakePoint,
     NSMakeRect,
     NSEvent,
-    CAMediaTimingFunction,
-    kCAMediaTimingFunctionEaseOut,
     NSView,
     NSColor
+)
+from Quartz import (
+    CAMediaTimingFunction,
+    kCAMediaTimingFunctionEaseOut
 )
 import traceback
 from typing import List, Optional

@@ -21,7 +21,9 @@ from AppKit import (
     NSScreenSaverWindowLevel,
     NSEvent,
     NSAnimationContext,
-    NSTimer
+    NSTimer,
+    NSMakeRect,
+    NSMakePoint
 )
 import objc
 
