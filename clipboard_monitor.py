@@ -215,6 +215,13 @@ class ClipboardMonitor:
         """Get clipboard history (thread-safe)."""
         with self._lock:
             return list(self.history)
+
+    def clear_history(self):
+        """Clear all clipboard history."""
+        with self._lock:
+            self.history.clear()
+        self._save_history()
+        print("[ClipboardMonitor] History cleared")
     
     def _poll_loop(self):
         """Background polling loop."""

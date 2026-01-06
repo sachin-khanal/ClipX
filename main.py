@@ -163,6 +163,14 @@ class ClipXDelegate(NSObject):
         # Create menu
         menu = NSMenu.alloc().init()
         
+        # Clear History item
+        clear_item = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(
+            "Clear History", "clearHistory:", ""
+        )
+        menu.addItem_(clear_item)
+        
+        menu.addItem_(NSMenuItem.separatorItem())
+        
         # Quit item
         quit_item = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(
             "Quit ClipX", "terminate:", "q"
@@ -310,6 +318,18 @@ class ClipXDelegate(NSObject):
         preview = item.content[:30].replace('\n', ' ')
         print(f"✅ Pasted: {preview}...")
     
+    def clearHistory_(self, sender):
+        """Clear clipboard history."""
+        print("[Main] Clearing history...")
+        if self._clipboard_monitor:
+            self._clipboard_monitor.clear_history()
+            
+            # If popup is visible, update it or close it
+            if self._popup_visible and self._popup:
+                self._popup.hide()
+                self._popup_visible = False
+                print("[Main] Popup hidden after clearing history")
+
     def applicationWillTerminate_(self, notification):
         """Cleanup on exit."""
         if self._clipboard_monitor:
